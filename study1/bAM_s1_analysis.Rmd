@@ -1,0 +1,127 @@
+---
+title: "belief_AltMotives - study 1"
+author: Ryan Carlson
+output: html_document
+---
+```{r install/load packages,include=FALSE}
+
+library("plyr") # plyr for aggregate data
+library("rstudioapi")
+library("ggplot2") #for plotting
+library("ggm") # for partial correlations
+library("ppcor") # " "
+library("psych") # for trait measures
+library("RVAideMemoire") #spearman bootstrapped CIs
+library("weights") # for displaying APA style stats (e.g. "p = .01"")
+library("broom")
+
+```
+
+```{r set directory, read in data set, include=FALSE}
+
+#Set working directory to the location of this R file (note: the dataset should be in the same folder)
+  # curr_dir <- getActiveDocumentContext()$path # get path to currently open R file
+  # setwd(dirname(curr_dir)) # set the working directory to curr_dirr
+  # #print(getwd()) # print directory
+  # rm("curr_dir")
+
+#Read dataset
+  data <- read.csv('bAM_s1_data.csv') 
+  
+```
+
+```{r knit functions,echo=FALSE, include=FALSE}
+  
+#formatting p-values for APA
+format_pval <- function(x){
+  if (x < .001) return(paste('<', '.001'))
+  if (x > .1) return(paste('=', rd(x, 2)))
+  paste('=', rd(x, 3))   # 3 = no. of digits to round p value to if p < .001 
+}
+
+```
+
+```{r compute trait BETA and Altruism, include=FALSE}
+
+#composite score for Belief in the Existence of True Altruism (BETA)
+  keys.list <- list(beta=c("BETA_1","BETA_2","-BETA_3","-BETA_4","BETA_5","BETA_6","BETA_7","-BETA_8","-BETA_9","-BETA_10"))
+  beta <- scoreItems(keys.list,data)
+  beta$alpha
+  data$beta <- beta$scores #add BETA composite measure to dataset
+
+#composite score for trait altruism
+  keys.list <- list(altruism=c("Altruism_1","Altruism_2","Altruism_3","Altruism_4","Altruism_5","Altruism_6","Altruism_7","Altruism_8","Altruism_9","Altruism_10","Altruism_11","Altruism_12","Altruism_13","Altruism_14","Altruism_15","Altruism_16","Altruism_17","Altruism_18","Altruism_19","Altruism_20"))
+  altruism <- scoreItems(keys.list,data)
+  altruism$alpha
+  data$altruism <- altruism$scores #add Altruism composite measure to dataset
+  
+```
+
+```{r main analyses, include=FALSE}
+
+#1. does BETA correlate with trait prosociality
+    t1 = cor.test(data$beta, data$altruism)
+    tidy(t1)
+
+#2. does BETA correlate with hypothetical giving
+    t2 = cor.test(data$beta, data$give_hypo)
+    tidy(t2)
+
+#3. does BETA correlate with real giving
+    t3 = cor.test(data$beta, data$give_real)
+    tidy(t3)
+
+#4a. does BETA correlate with hypothetical giving, even after controlling for trait prosociality
+    t4a = pcor.test(data$beta, data$give_hypo, data$altruism)
+    tidy(t4a)
+    
+#4a. does BETA correlate with real giving, even after controlling for trait prosociality
+    t4b = pcor.test(data$beta, data$give_real, data$altruism)
+    tidy(t4b)
+
+```
+#####Study 1 - Results
+
+(*M~BETA~* = `r rd(mean(data$beta),2)`, *SD~BETA~* = `r rd(sd(data$beta),2)`)
+
+  1. does BETA correlate with trait prosociality
+
+    (*r*(`r t1$par`) = `r rd(t1$e,2)`, *p* `r format_pval(t1$p.v)`, 95% confidence interval (CI) [`r rd(t1$conf.int[1],2)`,`r rd(t1$conf.int[2],2)`])
+
+  2. does BETA correlate with hypothetical giving
+
+    (*r*(`r t2$par`) = `r rd(t2$e,2)`, *p* `r format_pval(t2$p.v)`, 95% CI [`r rd(t2$conf.int[1],2)`,`r rd(t2$conf.int[2],2)`])
+
+  3. does BETA correlate with real giving
+
+    (*r*(`r t3$par`) = `r rd(t3$e,2)`, *p* `r format_pval(t3$p.v)`, 95% CI [`r rd(t3$conf.int[1],2)`,`r rd(t3$conf.int[2],2)`])
+
+  4. does BETA correlate with (a) hypothetical giving and (b) real giving, even after controlling for trait prosociality
+
+    (*r*(`r t4a$par`) = `r rd(t4a$e,2)`, *p* `r format_pval(t4a$p.v)`, 95% CI [`r rd(t4a$conf.int[1],2)`,`r rd(t4a$conf.int[2],2)`])
+ 
+    (*r*(`r t4b$par`) = `r rd(t4b$e,2)`, *p* `r format_pval(t4b$p.v)`, 95% CI [`r rd(t4b$conf.int[1],2)`,`r rd(t4b$conf.int[2],2)`])    
+    
+
+```{r s1_fig1,echo=FALSE}
+
+#setup pdf output
+  # pdf(file = "~/Box Sync/GitHub/belief_altMotives/s1_fig1.pdf",
+  # width = 3.5,
+  # height = 3)
+
+ggplot(data=data, aes(data$beta)) +
+  geom_histogram(aes(y =..density..),
+                 alpha=.5,
+                 bins = 14,
+                 position = 'stack', 
+                 stat = 'bin',
+                 color="black",
+                 fill="grey")+
+  geom_density()+theme_classic()+
+  xlab("belief in altruistic motivation")
+  
+#save output
+  # dev.off()
+```
+ 

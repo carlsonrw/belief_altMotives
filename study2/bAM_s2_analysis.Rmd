@@ -1,0 +1,600 @@
+---
+title: "belief_AltMotives - study 2" 
+author: Ryan Carlson
+output: html_document
+---
+```{r install/load packages,include=FALSE}
+
+library("plyr") # plyr for aggregate data
+library("tidyverse")
+library("ggm") # for partial correlations
+library("ppcor") # " "
+library("psych") # for trait measures
+library("lsr") # for computing effect sizes
+library("devtools") #pirateplots
+library("yarrr")#pirateplots
+library("rstudioapi")
+library("broom")
+library("weights")
+
+```
+
+```{r set directory, read in data set, include=FALSE}
+
+#Set working directory to the location of this R file (note: the dataset should be in the same folder)
+  # curr_dir <- getActiveDocumentContext()$path # get path to currently open R file
+  # setwd(dirname(curr_dir)) # set the working directory to curr_dirr
+  # #print(getwd()) # print directory
+  # rm("curr_dir")
+  
+```
+
+```{r read in raw data set, include=FALSE}
+
+df = read.csv('bAM_s2_data.csv') #raw data frame 
+data = df[,c("id","condition")] # a new, clean data frame 
+
+```
+
+```{r knit functions,echo=FALSE}
+  
+#formatting p-values for APA
+format_pval <- function(x){
+  if (x < .001) return(paste('<', '.001'))
+  if (x > .1) return(paste('=', rd(x, 2)))
+  paste('=', rd(x, 3))   # 3 = no. of digits to round p value to if p < .001 
+}
+
+#function for removing NAs from a specific column
+reduceFun <- function(data, desiredCols) {
+  completeVec <- complete.cases(data[, desiredCols])
+  return(data[completeVec, ])
+}
+
+```
+
+```{r create clean data frame for analysis, include=FALSE}
+
+#create averages for perception ratings 
+
+#AVG: altruism ratings
+  alt = df[,grep("Alt", names(df))] #get all altruism ratings 
+  #DF should contain ncol = 216. Or N = 3 (DVs per V) x 8 (Vs) x 4 (orders) x 2 (cond: motive/outcome) + 3 (DVs per control V) x 8 (Vs)
+    #ncol(alt) #sanity check
+  alt = alt %>% mutate(alt_avg=rowMeans(alt, na.rm = TRUE)) #create new column averaging across them
+  data$perceived_alt = alt$alt_avg
+  #sanity_check_alt = describe(alt) #check for correct variables
+
+    #AVGS FOR ALL GROUPS BY MOTIVE, PERSON, ACTION (ncol = 72)
+    
+      #AVG: altruism ratings - motive
+      mtvdata = alt[,grep("m_", names(alt))] #get alt ratings of motives
+        #ncol(mtvdata) #sanity check
+      mtvdata = mtvdata %>% mutate(actC_avg_m_alt=rowMeans(mtvdata, na.rm = TRUE)) #create new column averaging across them
+      data$actC_avg_m_alt = mtvdata$actC_avg_m_alt #write to main df
+  
+      #AVG: altruism ratings - person
+      psndata = alt[,grep("p_", names(alt))] #get alt ratings of persons
+        #ncol(psndata) #sanity check
+      psndata = psndata %>% mutate(actC_avg_p_alt=rowMeans(psndata, na.rm = TRUE)) #create new column averaging across them
+      data$actC_avg_p_alt = psndata$actC_avg_p_alt #write to main df
+    
+      #AVG: altruism ratings - action
+      actdata = alt[,grep("a_", names(alt))] #get alt ratings of actions
+      #ncol(actdata) #sanity check
+      actdata = actdata %>% mutate(actC_avg_a_alt=rowMeans(actdata, na.rm = TRUE)) #create new column averaging across them
+      data$actC_avg_a_alt = actdata$actC_avg_a_alt #write to main df
+
+    rm("mtvdata", "psndata", "actdata") #clean up workspace
+  
+    #AVGS FOR MOTIVES/OUTCOME GROUPS ONLY (ncol = 48)
+    
+      #AVG: altruism ratings - material 
+      mdata = alt[,grep("_m", names(alt))] #get alt ratings of material motives/outcomes
+      mdata = mdata[, -grep("actC", colnames(mdata))] #remove motive ratings from control group, which are picked via '_m'
+        #ncol(mdata) #sanity check
+      mdata = mdata %>% mutate(actMO_avg_m_alt=rowMeans(mdata, na.rm = TRUE)) #create new column averaging across them
+      data$actMO_avg_m_alt = mdata$actMO_avg_m_alt #write to main df
+    
+      #AVG: altruism ratings - social
+      sdata = alt[,grep("_s", names(alt))] #get alt ratings of social motives/outcomes
+        #ncol(sdata) #sanity check
+      sdata = sdata %>% mutate(actMO_avg_s_alt=rowMeans(sdata, na.rm = TRUE)) #create new column averaging across them
+      data$actMO_avg_s_alt = sdata$actMO_avg_s_alt #write to main df
+    
+      #AVG: altruism ratings - emotional
+      edata = alt[,grep("_e", names(alt))] #get alt ratings of emotional motives/outcomes
+        #ncol(edata) #sanity check
+      edata = edata %>% mutate(actMO_avg_e_alt=rowMeans(edata, na.rm = TRUE)) #create new column averaging across them
+      data$actMO_avg_e_alt = edata$actMO_avg_e_alt #write to main df
+    
+      #AVG: altruism ratings - other-oriented
+      odata = alt[,grep("_o", names(alt))] #get alt ratings of other-oriented motives/outcomes
+        #ncol(odata) #sanity check
+      odata = odata %>% mutate(actMO_avg_o_alt=rowMeans(odata, na.rm = TRUE)) #create new column averaging across them
+      data$actMO_avg_o_alt = odata$actMO_avg_o_alt #write to main df
+    
+    rm("mdata", "sdata", "edata", "odata", "alt") #clean up workspace
+    
+#########################
+  
+#AVG: selfishness ratings
+    self = df[,grep("Self", names(df))] #get all selfishness ratings 
+    #DF should contain ncol = 216. Or N = 3 (DVs per V) x 8 (Vs) x 4 (orders) x 2 (cond: motive/outcome) + 3 (DVs per control V) x 8 (Vs)
+      #ncol(self) #sanity check
+    self = self %>% mutate(self_avg=rowMeans(self, na.rm = TRUE)) #create new column averaging across them
+    data$perceived_self = self$self_avg
+    #sanity_check_self = describe(self) #check for correct variables 
+
+  
+    #AVGS FOR ALL GROUPS BY MOTIVE, PERSON, ACTION (ncol = 72)
+    
+      #AVG: selfishness ratings - motive
+      mtvdata = self[,grep("m_", names(self))] #get self ratings of motives
+        #ncol(mtvdata) #sanity check
+      mtvdata = mtvdata %>% mutate(actC_avg_m_self=rowMeans(mtvdata, na.rm = TRUE)) #create new column averaging across them
+      data$actC_avg_m_self = mtvdata$actC_avg_m_self #write to main df
+    
+      #AVG: selfishness ratings - person
+      psndata = self[,grep("p_", names(self))] #get self ratings of persons
+        #ncol(psndata) #sanity check
+      psndata = psndata %>% mutate(actC_avg_p_self=rowMeans(psndata, na.rm = TRUE)) #create new column averaging across them
+      data$actC_avg_p_self = psndata$actC_avg_p_self #write to main df
+    
+      #AVG: selfishness ratings - action
+      actdata = self[,grep("a_", names(self))] #get self ratings of actions
+        #ncol(actdata) #sanity check
+      actdata = actdata %>% mutate(actC_avg_a_self=rowMeans(actdata, na.rm = TRUE)) #create new column averaging across them
+      data$actC_avg_a_self = actdata$actC_avg_a_self #write to main df
+    
+    rm("mtvdata", "psndata", "actdata") #clean up workspace
+  
+    #AVGS FOR MOTIVES/OUTCOME GROUPS ONLY (ncol = 48)
+  
+      #AVG: selfishness ratings - material
+      mdata = self[,grep("_m", names(self))] #get self ratings of material motives/outcomes
+      mdata = mdata[, -grep("actC", colnames(mdata))] #remove motive ratings from control group, which are picked via '_m' 
+      #the above was not an issue for 'e', 's', or 'o'
+        #ncol(mdata) #sanity check
+      mdata = mdata %>% mutate(actMO_avg_m_self=rowMeans(mdata, na.rm = TRUE)) #create new column averaging across them
+      data$actMO_avg_m_self = mdata$actMO_avg_m_self #write to main df
+    
+      #AVG: selfishness ratings - social
+      sdata = self[,grep("_s", names(self))] #get self ratings of social motives/outcomes
+        #ncol(sdata) #sanity check
+      sdata = sdata %>% mutate(actMO_avg_s_self=rowMeans(sdata, na.rm = TRUE)) #create new column averaging across them
+      data$actMO_avg_s_self = sdata$actMO_avg_s_self #write to main df
+    
+      #AVG: selfishness ratings - emotional
+      edata = self[,grep("_e", names(self))] #get self ratings of emotional motives/outcomes
+        #ncol(edata) #sanity check
+      edata = edata %>% mutate(actMO_avg_e_self=rowMeans(edata, na.rm = TRUE)) #create new column averaging across them
+      data$actMO_avg_e_self = edata$actMO_avg_e_self #write to main df
+    
+      #AVG: selfishness ratings - other-oriented
+      odata = self[,grep("_o", names(self))] #get self ratings of other-oriented motives/outcomes
+        #ncol(odata) #sanity check
+      odata = odata %>% mutate(actMO_avg_o_self=rowMeans(odata, na.rm = TRUE)) #create new column averaging across them
+      data$actMO_avg_o_self = odata$actMO_avg_o_self #write to main df
+    
+    rm("mdata", "sdata", "edata", "odata", "self") #clean up workspace
+    
+#Note: One belief item (variable name: self_belief1) that ranged from 1 to 5 (i.e., 1-2-3-4-5) was mistakenly 're-coded' in the Qualtrics' output as 1-3-4-5-6. The survey, as viewed by participants, displayed correctly. The code below fixes the output error:
+  df$self_belief1[df$self_belief1 == "1"] <- "2"
+  df$self_belief1 = as.numeric(df$self_belief1)
+  df$self_belief1 = (df$self_belief1 - 1)
+    
+```
+
+```{r exclusions, include=FALSE}
+
+#create average reading time to exclude those who did not read the prosocial scenarios
+  rt = df[,grep("rt", names(df))] #get variables containing time
+  #ncol(rt) #should be 72. 8 (DVs per 2) x 1 (Cond: Control) + (8 (Vs) x 4 (orders) x 2 (cond: motive/outcome))
+  rt = rt %>% mutate(rt_avg=rowMeans(rt, na.rm = TRUE)) #create new column called 'avg' averaging across them
+  data$rt = rt$rt_avg
+  rm("rt")
+  data = data[ , !(names(data) %in% c("condition"))] #rm condition to avoid variable duplcating during merge
+  df <- merge(df,data,by="id") #merge our two data frames
+  rm("data")
+
+  threshold = 1.5  # minimum RT required to read vignettes
+  removedRT = subset(df, rt < threshold)  # Ps removed for falling below min avg RT
+  data = subset(df, rt >= threshold)  # new dataset, with people below minimum RT removed
+  rm("df")
+  
+#plyr::count(data$condition) # participants per condition
+  # 1 = control
+  # 2 = motive
+  # 3 = outcome
+
+```
+
+```{r data reduction & validation,warning=FALSE, include=FALSE}
+
+#internal validity
+  validity = data[c("actC_avg_a_alt","actC_avg_a_self","actC_avg_m_alt",	"actC_avg_m_self","actC_avg_p_alt","actC_avg_p_self")]	
+  # alpha(validity, keys=c("actC_avg_a_alt","-actC_avg_a_self","actC_avg_m_alt",	"-actC_avg_m_self","actC_avg_p_alt","-actC_avg_p_self"),
+  #       cumulative=FALSE,
+  #       title=NULL, max=10,na.rm = FALSE,
+  #       check.keys=TRUE,n.iter=1,delete=TRUE)
+
+#correlation between for ratings of altruism (and selfishness) for agent's action, agent's motive, and the agent.
+  data_reduce_alt = validity[c(1,3,5)]
+  reduce_corr_alt = cor(data_reduce_alt)
+  round(reduce_corr_alt, 2)
+
+  data_reduce_self = validity[c(2,4,6)]
+  reduce_corr_self = cor(data_reduce_self)
+  round(reduce_corr_self, 2)
+  
+#compute average altruism and selfishness ratings
+  data$perceived_alt = (data$actC_avg_a_alt + data$actC_avg_m_alt + data$actC_avg_p_alt)/3
+  data$perceived_self = (data$actC_avg_a_self + data$actC_avg_m_self + data$actC_avg_p_self)/3
+
+#collapsing across altruism and selfishness ratings 
+
+  #compute average perceived altruism collapsing across all ratings
+    data$alt_comp = ((data$perceived_alt - data$perceived_self)/2)
+    
+  #compute average perceived altruism for each benefit-type
+    data$alt_comp_e = ((data$actMO_avg_e_alt - data$actMO_avg_e_self)/2)
+    data$alt_comp_m = ((data$actMO_avg_m_alt - data$actMO_avg_m_self)/2)
+    data$alt_comp_o = ((data$actMO_avg_o_alt - data$actMO_avg_o_self)/2)
+    data$alt_comp_s = ((data$actMO_avg_s_alt - data$actMO_avg_s_self)/2)
+  
+  #compute average perceived altruism collapsing across all ratings
+    data$alt_comp = ((data$perceived_alt - data$perceived_self)/2)
+    
+```
+
+```{r compute trait BETA / EC / PT, include=FALSE} 
+
+#note: CRT computed manually
+
+#composite score for trait BETA
+keys.list <- list(beta=c("BETA_1","BETA_2","-BETA_3","-BETA_4","BETA_5","BETA_6","BETA_7","-BETA_8","-BETA_9","-BETA_10"))
+beta <- scoreItems(keys.list,data)
+#summary(beta)
+#describe(beta$scores)
+data$beta <- beta$scores #add BETA composite measure to dataset
+
+#composite score for trait Empathic Concern (EC)
+keys.list <- list(EC=c("iri2","iri4","iri9","-iri14","-iri18","iri20","iri22"))
+ec <- scoreItems(keys.list,data,impute="none")
+#summary(ec)
+#describe(ec$scores)
+data$ec <- ec$scores #add EC composite measure to dataset
+
+#composite score for trait Perspective Taking (PT)
+keys.list <- list(PT=c("-iri3","iri8","-iri11","iri15","iri21","iri25","iri28"))
+pt <- scoreItems(keys.list,data,impute="none") #(scale rubric, dataset, ignore blanks)
+#summary(pt)
+#describe(pt$scores)
+data$pt <- pt$scores #add PT composite measure to dataset
+
+```
+
+```{r main analyses1, include=FALSE}
+
+#PROSOCIAL ACTION: do beliefs correlate with actions?
+
+  #1. does BETA correlate with volunteering?
+    data_psb = reduceFun(data, "proDV")#create subset of data, because not all Ps completed prosocial DV (N = 9)
+    t1 = cor.test(data_psb$beta, data_psb$proDV) 
+    tidy(t1)
+    
+  #2. does BETA correlate with volunteering, even after controlling for Empathic Concern and Perspective Taking
+    control_vars <- c("ec","pt")
+    control_df <- data_psb[control_vars]
+    t2 = pcor.test(data_psb$beta, data_psb$proDV, control_df)
+    tidy(t2)
+    
+```
+
+```{r main analyses2, include=FALSE}
+
+#PROSOCIAL INFERENCE: do beliefs correlate with inferences?
+    
+  #3. does BETA correlate with perceptions of altruism in the CONTROL condition?
+    cond3_data <- subset(data, condition == "3") #subset data by condition
+    #correlate BETA w/ perceived altruism and selfishness
+    t3a = cor.test(cond3_data$beta, cond3_data$perceived_alt)
+    t3b = cor.test(cond3_data$beta, cond3_data$perceived_self)
+    tidy(t3a)
+    tidy(t3b)
+
+  #4. does BETA correlate with perceptions of altruism in the UNAMBIGUOUS condition?
+    cond2_data <- subset(data, condition == "2") #subset data by condition
+    #correlate BETA w/ perceived altruism and selfishness
+    t4a = cor.test(cond2_data$beta, cond2_data$perceived_alt)
+    t4b = cor.test(cond2_data$beta, cond2_data$perceived_self)
+    tidy(t4a)
+    tidy(t4b)
+
+  #5. does BETA correlate with perceptions of altruism in the AMBIGUOUS condition?
+    cond1_data <- subset(data, condition == "1") #subset data by condition
+    #correlate BETA w/ perceived altruism and selfishness
+    t5a = cor.test(cond1_data$beta, cond1_data$perceived_alt)
+    t5b = cor.test(cond1_data$beta, cond1_data$perceived_self)
+    tidy(t5a)
+    tidy(t5b)
+    
+```
+
+```{r main analyses3, include=FALSE}
+
+#RELATION TO TRAIT MEASURES: do beliefs correlate with trait empathy or cognitive reflection?
+   
+  #6. does BETA correlate with empathic concern?
+    t6 = cor.test(data$beta, data$ec)
+    tidy(t6)
+
+  #7. does BETA correlate with perspective taking?
+    t7 = cor.test(data$beta, data$pt)
+    tidy(t7)
+
+  #8. does BETA correlate with cognitive reflection?
+    t8 = cor.test(data$beta, data$CRT)
+    tidy(t8)
+    
+```
+
+```{r main analyses4, include=FALSE}
+  
+#BELIEFS ABOUT SELF AND OTHER: do beliefs in altruism reflect self-serving biases?
+   
+  #9. does BETA correlate CAPACITY beliefs for (a) self and (b) others?
+    t9a = cor.test(data$beta, data$self_belief1)
+    t9b = cor.test(data$beta, data$other_belief1)
+    tidy(t9a)
+    tidy(t9b)
+    
+  #10. does BETA correlate FREQUENCY beliefs for (a) self and (b) others?
+    t10a = cor.test(data$beta, data$self_belief2)
+    t10b = cor.test(data$beta, data$other_belief2)
+    tidy(t10a)
+    tidy(t10b)
+    
+  #11. do CAPACITY beliefs differ between self and others?
+    t11 = t.test(data$self_belief1,data$other_belief1, paired=TRUE)
+    t11d = cohensD(data$self_belief1,data$other_belief1) #obtain effect size
+    tidy(t11)
+    
+  #12. do FREQUENCY beliefs differ between self and others?
+    t12 = t.test(data$self_belief2,data$other_belief2, paired=TRUE)
+    t12d = cohensD(data$self_belief2,data$other_belief2) #obtain effect size
+    tidy(t12)
+    
+  #13. do individual differences between CAPACITY beliefs for self vs. other relate to BETA
+    data$self_other_belief1_diff <- (data$self_belief1 - data$other_belief1) # compute diff. score for self/other capacity beliefs 
+    t13 = cor.test(data$beta, data$self_other_belief1_diff)
+    tidy(t13)
+    
+  #14. do individual differences between FREQUENCY beliefs for self vs. other relate to BETA
+    data$self_other_belief2_diff <- (data$self_belief2 - data$other_belief2) # compute diff. score for self/other frequency beliefs
+    t14 = cor.test(data$beta, data$self_other_belief2_diff)
+    tidy(t14)
+
+```
+#####Study 2 - Results
+
+(*M~BETA~* = `r rd(mean(data$beta),2)`, *SD~BETA~* = `r rd(sd(data$beta),2)`)
+
+######PROSOCIAL ACTION: do beliefs correlate with actions?
+
+  1. does BETA correlate with volunteering?
+  
+    (*r*(`r t1$par`) = `r rd(t1$e,2)`, *p* `r format_pval(t1$p.v)`, 95% CI [`r rd(t1$conf.int[1],2)`,`r rd(t1$conf.int[2],2)`])
+
+  2. does BETA correlate with volunteering, even after controlling for Empathic Concern and Perspective Taking
+  
+    (*r*(274) = `r rd(t2$e,2)`, *p* `r format_pval(t2$p.v)`, 95% CI [.04,.27])
+  
+######PROSOCIAL INFERENCE: do beliefs correlate with inferences?
+    
+  3. does BETA correlate with perceptions of altruism in the CONTROL condition?
+  
+    (*r*(`r t3a$par`) = `r rd(t3a$e,2)`, *p* `r format_pval(t3a$p.v)`, 95% CI [`r rd(t3a$conf.int[1],2)`,`r rd(t3a$conf.int[2],2)`])
+
+    (*r*(`r t3b$par`) = `r rd(t3b$e,2)`, *p* `r format_pval(t3b$p.v)`, 95% CI [`r rd(t3b$conf.int[1],2)`,`r rd(t3b$conf.int[2],2)`])
+
+  4. does BETA correlate with perceptions of altruism in the UNAMBIGUOUS condition?
+  
+    (*r*(`r t4a$par`) = `r rd(t4a$e,2)`, *p* `r format_pval(t4a$p.v)`, 95% CI [`r rd(t4a$conf.int[1],2)`,`r rd(t4a$conf.int[2],2)`])
+
+    (*r*(`r t4b$par`) = `r rd(t4b$e,2)`, *p* `r format_pval(t4b$p.v)`, 95% CI [`r rd(t4b$conf.int[1],2)`,`r rd(t4b$conf.int[2],2)`])
+
+  5. does BETA correlate with perceptions of altruism in the AMBIGUOUS condition?
+  
+    (*r*(`r t5a$par`) = `r rd(t5a$e,2)`, *p* `r format_pval(t5a$p.v)`, 95% CI [`r rd(t5a$conf.int[1],2)`,`r rd(t5a$conf.int[2],2)`])
+    
+    (*r*(`r t5b$par`) = `r rd(t5b$e,2)`, *p* `r format_pval(t5b$p.v)`, 95% CI [`r rd(t5b$conf.int[1],2)`,`r rd(t5b$conf.int[2],2)`])
+ 
+######RELATION TO TRAIT MEASURES: do beliefs correlate with trait empathy or cognitive reflection?
+   
+  6. does BETA correlate with empathic concern?
+  
+    (*r*(`r t6$par`) = `r rd(t6$e,2)`, *p* `r format_pval(t6$p.v)`, 95% CI [`r rd(t6$conf.int[1],2)`,`r rd(t6$conf.int[2],2)`])
+
+  7. does BETA correlate with perspective taking?
+  
+    (*r*(`r t7$par`) = `r rd(t7$e,2)`, *p* `r format_pval(t7$p.v)`, 95% CI [`r rd(t7$conf.int[1],2)`,`r rd(t7$conf.int[2],2)`])
+
+  8. does BETA correlate with cognitive reflection?
+  
+    (*r*(`r t8$par`) = `r rd(t8$e,2)`, *p* `r format_pval(t8$p.v)`, 95% CI [`r rd(t8$conf.int[1],2)`,`r rd(t8$conf.int[2],2)`])
+
+######BELIEFS ABOUT SELF AND OTHER: do beliefs in altruism reflect self-serving biases?
+   
+  9. does BETA correlate CAPACITY beliefs for (a) self and (b) others?
+  
+    (self: *r*(`r t9a$par`) = `r rd(t9a$e,2)`, *p* `r format_pval(t9a$p.v)`, 95% CI [`r rd(t9a$conf.int[1],2)`,`r rd(t9a$conf.int[2],2)`]; others: *r*(`r t9b$par`) = `r rd(t9b$e,2)`, *p* `r format_pval(t9b$p.v)`, 95% CI [`r rd(t9b$conf.int[1],2)`,`r rd(t9b$conf.int[2],2)`])
+    
+  10. does BETA correlate FREQUENCY beliefs for (a) self and (b) others?
+  
+    (self: *r*(`r t10a$par`) = `r rd(t10a$e,2)`, *p* `r format_pval(t10a$p.v)`, 95% CI [`r rd(t10a$conf.int[1],2)`,`r rd(t10a$conf.int[2],2)`]; others: *r*(`r t10b$par`) = `r rd(t10b$e,2)`, *p* `r format_pval(t10b$p.v)`, 95% CI [`r rd(t10b$conf.int[1],2)`,`r rd(t10b$conf.int[2],2)`])
+    
+  11. do CAPACITY beliefs differ between self and others?
+  
+    (*M* = `r rd(mean(data$self_belief1),2)`, *SD* = `r rd(sd(data$self_belief1),2)`)
+    (*M* = `r rd(mean(data$other_belief1),2)`, *SD* = `r rd(sd(data$other_belief1),2)`, *t*(`r t11$par`) = `r rd(t11$e,2)`, *p* `r format_pval(t11$p.v)`, 95% CI [`r rd(t11$conf.int[1],2)`,`r rd(t11$conf.int[2],2)`], d = `r rd(t11d,2)`)
+    
+  12. do FREQUENCY beliefs differ between self and others?
+  
+    (*M* = `r rd(mean(data$self_belief2),2)`, *SD* = `r rd(sd(data$self_belief2),2)`)
+    (*M* = `r rd(mean(data$other_belief2),2)`, *SD* = `r rd(sd(data$other_belief2),2)`, *t*(`r t12$par`) = `r rd(t12$e,2)`, *p* `r format_pval(t12$p.v)`, 95% CI [`r rd(t12$conf.int[1],2)`,`r rd(t12$conf.int[2],2)`], d = `r rd(t12d,2)`)
+    
+  13. do individual differences between CAPACITY beliefs for self vs. other relate
+  
+    (*r*(`r t13$par`) = `r rd(t13$e,2)`, *p* `r format_pval(t13$p.v)`, 95% CI [`r rd(t13$conf.int[1],2)`,`r rd(t13$conf.int[2],2)`])
+    
+  14. do individual differences between FREQUENCY beliefs for self vs. other relate
+  
+    (*r*(`r t14$par`) = `r rd(t14$e,2)`, *p* `r format_pval(t14$p.v)`, 95% CI [`r rd(t14$conf.int[1],2)`,`r rd(t14$conf.int[2],2)`])
+
+```{r Supplemental: correlations between BETA and each benefit type,echo=FALSE}
+
+
+# Ambiguous Motive correlations
+  supp_data_cond3 <- subset(data, condition == "3") #
+
+  #correlation between BETA and perceptions of altruism and selfishness for actions involving a:
+    #material benefit
+    aM_m_a = cor.test(supp_data_cond3$beta, supp_data_cond3$actMO_avg_m_alt) # altruism
+    aM_m_s = cor.test(supp_data_cond3$beta, supp_data_cond3$actMO_avg_m_self) # selfishness
+    # tidy(aM_m_a)
+    # tidy(aM_m_s)
+    
+    #social benefit
+    aM_s_a = cor.test(supp_data_cond3$beta, supp_data_cond3$actMO_avg_s_alt) # altruism 
+    aM_s_s = cor.test(supp_data_cond3$beta, supp_data_cond3$actMO_avg_s_self) # selfishness 
+    # tidy(aM_s_a)
+    # tidy(aM_s_s)
+    
+    #emotional benefit
+    aM_e_a = cor.test(supp_data_cond3$beta, supp_data_cond3$actMO_avg_e_alt) # altruism 
+    aM_e_s = cor.test(supp_data_cond3$beta, supp_data_cond3$actMO_avg_e_self) # selfishness 
+    # tidy(aM_e_a)
+    # tidy(aM_e_s)
+
+
+# Unambiguous Motive correlations
+  supp_data_cond2 <- subset(data, condition == "2")
+
+  #correlation between BETA and perceptions of altruism and selfishness for actions involving a: 
+    #material motive
+    uM_m_a = cor.test(supp_data_cond2$beta, supp_data_cond2$actMO_avg_m_alt) # altruism 
+    uM_m_s = cor.test(supp_data_cond2$beta, supp_data_cond2$actMO_avg_m_self) # selfishness 
+    # tidy(uM_m_a)
+    # tidy(uM_m_s)
+  
+    #social motive
+    uM_s_a = cor.test(supp_data_cond2$beta, supp_data_cond2$actMO_avg_s_alt) # altruism
+    uM_s_s = cor.test(supp_data_cond2$beta, supp_data_cond2$actMO_avg_s_self) # selfishness
+    # tidy(uM_s_a)
+    # tidy(uM_s_s)
+    
+    #emotional motive
+    uM_e_a = cor.test(supp_data_cond2$beta, supp_data_cond2$actMO_avg_e_alt) # altruism
+    uM_e_s = cor.test(supp_data_cond2$beta, supp_data_cond2$actMO_avg_e_self) # selfishness
+    # tidy(uM_e_a)
+    # tidy(uM_e_s)
+    
+```
+Supplemental Correlational Analyses
+
+Ambiguous motive
+
+  material
+  
+    `r rd(aM_m_a$est,2)`   95% CI:`r rd(aM_m_a$conf.int[1:2],2)`   p`r format_pval(aM_m_a$p.v)`
+    
+    `r rd(aM_m_s$est,2)`   95% CI:`r rd(aM_m_s$conf.int[1:2],2)`   p`r format_pval(aM_m_s$p.v)`
+    
+  social
+  
+    `r rd(aM_s_a$est,2)`   95% CI:`r rd(aM_s_a$conf.int[1:2],2)`   p`r format_pval(aM_s_a$p.v)`
+    
+    `r rd(aM_s_s$est,2)`   95% CI:`r rd(aM_s_s$conf.int[1:2],2)`   p`r format_pval(aM_s_s$p.v)`
+    
+  emotional
+  
+    `r rd(aM_e_a$est,2)`   95% CI:`r rd(aM_e_a$conf.int[1:2],2)`   p`r format_pval(aM_e_a$p.v)`
+    
+    `r rd(aM_e_s$est,2)`   95% CI:`r rd(aM_e_s$conf.int[1:2],2)`   p`r format_pval(aM_e_s$p.v)`
+    
+
+Unambiguous motive
+
+  material
+  
+    `r rd(uM_m_a$est,2)`   95% CI:`r rd(uM_m_a$conf.int[1:2],2)`   p`r format_pval(uM_m_a$p.v)`
+    
+    `r rd(uM_m_s$est,2)`   95% CI:`r rd(uM_m_s$conf.int[1:2],2)`   p`r format_pval(uM_m_s$p.v)`
+    
+  social
+  
+    `r rd(uM_s_a$est,2)`   95% CI:`r rd(uM_s_a$conf.int[1:2],2)`   p`r format_pval(uM_s_a$p.v)`
+    
+    `r rd(uM_s_s$est,2)`   95% CI:`r rd(uM_s_s$conf.int[1:2],2)`   p`r format_pval(uM_s_s$p.v)`
+    
+  emotional
+  
+    `r rd(uM_e_a$est,2)`   95% CI:`r rd(uM_e_a$conf.int[1:2],2)`   p`r format_pval(uM_e_a$p.v)`
+    
+    `r rd(uM_e_s$est,2)`   95% CI:`r rd(uM_e_s$conf.int[1:2],2)`   p`r format_pval(uM_e_s$p.v)`
+    
+    
+```{r s2_fig1,echo=FALSE}
+
+#setup pdf output
+  # pdf(file = "~/Box Sync/GitHub/belief_altMotives/s2_fig1.pdf",
+  # width = 3.5,
+  # height = 3)
+
+ggplot(data=data, aes(data$beta)) +
+  geom_histogram(aes(y =..density..),
+                 alpha=.5,
+                 bins = 14,
+                 position = 'stack', 
+                 stat = 'bin',
+                 color="black",
+                 fill="grey")+
+  geom_density()+theme_classic()+
+  xlab("belief in altruistic motivation")
+  
+#save output
+ # dev.off()
+```
+ 
+```{r s2_fig2,echo=FALSE}
+
+#setup pdf output 
+#   pdf(file = "~/Box Sync/GitHub/belief_altMotives/s2_fig2.pdf",
+#   width = 6, # The width of the plot in inches
+#   height = 3) # The height of the plot in inches
+
+plot3 = data %>% dplyr::select(perceived_alt,perceived_self, beta, condition)
+  plot3 = gather(plot3, "selfOther", "perception",1:2)
+
+  plot3$condition <- factor(plot3$condition,
+                          levels = c("1","2","3"),
+                          labels = c("no information", "unambiguous", "ambiguous"))
+  
+  plot3$selfOther <- factor(plot3$selfOther,
+                          levels = c("perceived_alt","perceived_self"),
+                          labels = c("altruistic", "selfish"))
+  
+ggplot(plot3,aes(beta,perception,color=condition))+
+  xlab("belief in altruistic motivation")+
+  geom_point()+
+  facet_grid(selfOther~condition,switch = "y" )+ #switch = "y" to change label position
+  geom_smooth(method = "lm", se = FALSE)+
+  theme_minimal()
+
+#save output
+ # dev.off()
+
+```
+
